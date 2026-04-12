@@ -4,6 +4,8 @@
 #define LOOM_NO_SHORT_NAMES
 #include "loom.h"
 
+#include <stddef.h>
+
 #ifdef _WIN32
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
