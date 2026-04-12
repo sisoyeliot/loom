@@ -1,9 +1,4 @@
 #include "internal.h"
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <fnmatch.h>
-#include <glob.h>
 #include <errno.h>
 
 void loom_arr_push(loom_arr_t *a, const char *s) {
@@ -26,7 +21,7 @@ char *loom_path_join(const char *a, const char *b) {
     if (!a || !a[0]) return strdup(b);
     if (!b || !b[0]) return strdup(a);
     size_t la = strlen(a);
-    int need_sep = (a[la - 1] != '/');
+    int need_sep = (a[la - 1] != '/' && a[la - 1] != '\\');
     char *out = malloc(la + strlen(b) + need_sep + 1);
     sprintf(out, need_sep ? "%s/%s" : "%s%s", a, b);
     return out;
@@ -34,25 +29,33 @@ char *loom_path_join(const char *a, const char *b) {
 
 const char *loom_path_ext(const char *path) {
     const char *dot = strrchr(path, '.');
-    const char *sep = strrchr(path, '/');
+    const char *sep1 = strrchr(path, '/');
+    const char *sep2 = strrchr(path, '\\');
+    const char *sep = sep1 > sep2 ? sep1 : sep2;
     if (!dot || (sep && dot < sep)) return "";
     return dot;
 }
 
 const char *loom_path_base(const char *path) {
-    const char *s = strrchr(path, '/');
+    const char *s1 = strrchr(path, '/');
+    const char *s2 = strrchr(path, '\\');
+    const char *s = s1 > s2 ? s1 : s2;
     return s ? s + 1 : path;
 }
 
 char *loom_path_dir(const char *path) {
-    const char *s = strrchr(path, '/');
+    const char *s1 = strrchr(path, '/');
+    const char *s2 = strrchr(path, '\\');
+    const char *s = s1 > s2 ? s1 : s2;
     if (!s) return strdup(".");
     return strndup(path, s - path);
 }
 
 char *loom_path_noext(const char *path) {
     const char *dot = strrchr(path, '.');
-    const char *sep = strrchr(path, '/');
+    const char *sep1 = strrchr(path, '/');
+    const char *sep2 = strrchr(path, '\\');
+    const char *sep = sep1 > sep2 ? sep1 : sep2;
     if (!dot || (sep && dot < sep)) return strdup(path);
     return strndup(path, dot - path);
 }
@@ -60,11 +63,166 @@ char *loom_path_noext(const char *path) {
 char *loom_path_mangle(const char *path) {
     char *m = strdup(path);
     for (char *p = m; *p; p++) {
-        if (*p == '/' || *p == '.' || *p == '-')
+        if (*p == '/' || *p == '\\' || *p == '.' || *p == '-')
             *p = '_';
     }
     return m;
 }
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+int loom_mkdir_p(const char *path) {
+    char tmp[4096];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            char old = *p;
+            *p = '\0';
+            CreateDirectoryA(tmp, NULL);
+            *p = old;
+        }
+    }
+    return (CreateDirectoryA(tmp, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) ? 0 : -1;
+}
+
+int loom_path_exists(const char *path) {
+    return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+time_t loom_path_mtime(const char *path) {
+    WIN32_FILE_ATTRIBUTE_DATA attr;
+    if (GetFileAttributesExA(path, GetFileExInfoStandard, &attr)) {
+        ULARGE_INTEGER ull;
+        ull.LowPart = attr.ftLastWriteTime.dwLowDateTime;
+        ull.HighPart = attr.ftLastWriteTime.dwHighDateTime;
+        return (time_t)(ull.QuadPart / 10000000ULL - 11644473600ULL);
+    }
+    return 0;
+}
+
+static int loom_win_fnmatch(const char *pattern, const char *str) {
+    while (*pattern && *str) {
+        if (*pattern == '*') {
+            while (*pattern == '*') pattern++;
+            if (!*pattern) return 0;
+            while (*str) {
+                if (loom_win_fnmatch(pattern, str) == 0) return 0;
+                str++;
+            }
+            return -1;
+        } else if (*pattern == '?' || *pattern == *str) {
+            pattern++;
+            str++;
+        } else {
+            return -1;
+        }
+    }
+    while (*pattern == '*') pattern++;
+    return (*pattern == '\0' && *str == '\0') ? 0 : -1;
+}
+
+static void glob_recurse(const char *dir, const char *pattern, loom_arr_t *out) {
+    char search[4096];
+    snprintf(search, sizeof(search), "%s\\*", dir);
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(search, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.cFileName[0] == '.') continue;
+        char *full = loom_path_join(dir, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            glob_recurse(full, pattern, out);
+        } else if (loom_win_fnmatch(pattern, fd.cFileName) == 0) {
+            loom_arr_push(out, full);
+        }
+        free(full);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+}
+
+int loom_glob_match(const char *pattern, loom_arr_t *out) {
+    const char *dstar = strstr(pattern, "**");
+    if (dstar) {
+        char basedir[4096];
+        if (dstar == pattern) {
+            strcpy(basedir, ".");
+        } else {
+            size_t n = dstar - pattern;
+            if (n > 0 && (pattern[n - 1] == '/' || pattern[n - 1] == '\\')) n--;
+            snprintf(basedir, sizeof(basedir), "%.*s", (int)n, pattern);
+        }
+        const char *fp = dstar + 2;
+        if (*fp == '/' || *fp == '\\') fp++;
+        if (!*fp) fp = "*";
+        glob_recurse(basedir, fp, out);
+        return 0;
+    }
+
+    char parent[4096];
+    const char *last_sep1 = strrchr(pattern, '/');
+    const char *last_sep2 = strrchr(pattern, '\\');
+    const char *last_sep = last_sep1 > last_sep2 ? last_sep1 : last_sep2;
+    
+    if (last_sep) {
+        size_t n = last_sep - pattern;
+        snprintf(parent, sizeof(parent), "%.*s", (int)n, pattern);
+    } else {
+        strcpy(parent, ".");
+    }
+    const char *filename_pat = last_sep ? last_sep + 1 : pattern;
+    
+    WIN32_FIND_DATAA fd;
+    char search[4096];
+    snprintf(search, sizeof(search), "%s\\*", parent);
+    HANDLE h = FindFirstFileA(search, &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (fd.cFileName[0] == '.') continue;
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                if (loom_win_fnmatch(filename_pat, fd.cFileName) == 0) {
+                    char *full = loom_path_join(parent, fd.cFileName);
+                    loom_arr_push(out, full);
+                    free(full);
+                }
+            }
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+    return 0;
+}
+
+int loom_rmrf(const char *path) {
+    DWORD attr = GetFileAttributesA(path);
+    if (attr == INVALID_FILE_ATTRIBUTES) return 0;
+    
+    if (attr & FILE_ATTRIBUTE_DIRECTORY) {
+        char search[4096];
+        snprintf(search, sizeof(search), "%s\\*", path);
+        WIN32_FIND_DATAA fd;
+        HANDLE h = FindFirstFileA(search, &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0) continue;
+                char *child = loom_path_join(path, fd.cFileName);
+                loom_rmrf(child);
+                free(child);
+            } while (FindNextFileA(h, &fd));
+            FindClose(h);
+        }
+        return RemoveDirectoryA(path) ? 0 : -1;
+    }
+    return DeleteFileA(path) ? 0 : -1;
+}
+
+#else
+
+#include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <fnmatch.h>
+#include <glob.h>
 
 int loom_mkdir_p(const char *path) {
     char tmp[4096];
@@ -154,3 +312,5 @@ int loom_rmrf(const char *path) {
     }
     return unlink(path);
 }
+
+#endif

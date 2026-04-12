@@ -7,7 +7,11 @@ static void trim_newline(char *s) {
 }
 
 static int resolve_path(const char *name, char *out, size_t outsz) {
+#ifdef _WIN32
+    char *argv[] = {"where", (char *)name, NULL};
+#else
     char *argv[] = {"which", (char *)name, NULL};
+#endif
     char buf[512];
     if (loom_exec_capture(argv, buf, sizeof(buf)) == 0 && buf[0]) {
         trim_newline(buf);

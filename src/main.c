@@ -2,6 +2,10 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <process.h>
+#endif
+
 #ifndef LOOM_PREFIX
 #define LOOM_PREFIX "/usr/local"
 #endif
@@ -43,7 +47,11 @@ static const char *find_cc(void) {
     static const char *try[] = {"cc", "gcc", "clang", "tcc", NULL};
     for (int i = 0; try[i]; i++) {
         char cmd[256];
+#ifdef _WIN32
+        snprintf(cmd, sizeof(cmd), "where %s >nul 2>&1", try[i]);
+#else
         snprintf(cmd, sizeof(cmd), "command -v %s >/dev/null 2>&1", try[i]);
+#endif
         if (system(cmd) == 0) return try[i];
     }
     return NULL;
@@ -58,13 +66,45 @@ static int cmd_clean(void) {
 }
 
 static int cmd_fmt(void) {
+#ifdef _WIN32
+    if (system("where clang-format >nul 2>&1") != 0) {
+#else
     if (system("command -v clang-format >/dev/null 2>&1") != 0) {
+#endif
         LOOM_ERR("clang-format not found in PATH");
         return 1;
     }
-    return system(
-        "find . -name '*.c' -o -name '*.h' | grep -v .loom | xargs clang-format -i"
-    );
+    loom_arr_t arr = {0};
+    loom_glob_match("**/*.c", &arr);
+    loom_glob_match("**/*.h", &arr);
+    
+    loom_arr_t filtered = {0};
+    for (int i = 0; i < arr.count; i++) {
+        if (!strstr(arr.items[i], ".loom")) {
+            loom_arr_push(&filtered, arr.items[i]);
+        }
+    }
+    
+    if (filtered.count == 0) {
+        loom_arr_free(&arr);
+        return 0;
+    }
+    
+    char **fmt_argv = calloc(filtered.count + 3, sizeof(char *));
+    fmt_argv[0] = strdup("clang-format");
+    fmt_argv[1] = strdup("-i");
+    for (int i = 0; i < filtered.count; i++) {
+        fmt_argv[i + 2] = strdup(filtered.items[i]);
+    }
+    fmt_argv[filtered.count + 2] = NULL;
+    
+    int rc = loom_exec(fmt_argv);
+    
+    for (int i = 0; fmt_argv[i]; i++) free(fmt_argv[i]);
+    free(fmt_argv);
+    loom_arr_free(&arr);
+    loom_arr_free(&filtered);
+    return rc;
 }
 
 static int cmd_dispatch(const char *cmd, int argc, char **argv) {
@@ -75,10 +115,16 @@ static int cmd_dispatch(const char *cmd, int argc, char **argv) {
 
     loom_mkdir_p(".loom");
 
-    int need_rebuild = !loom_path_exists(".loom/runner");
+#ifdef _WIN32
+#define RUNNER_OUT ".loom/runner.exe"
+#else
+#define RUNNER_OUT ".loom/runner"
+#endif
+
+    int need_rebuild = !loom_path_exists(RUNNER_OUT);
     if (!need_rebuild) {
         struct stat sc, sr;
-        if (stat("build.c", &sc) == 0 && stat(".loom/runner", &sr) == 0)
+        if (stat("build.c", &sc) == 0 && stat(RUNNER_OUT, &sr) == 0)
             need_rebuild = sc.st_mtime > sr.st_mtime;
     }
 
@@ -95,8 +141,8 @@ static int cmd_dispatch(const char *cmd, int argc, char **argv) {
                  "%s -std=c11 -O2 build.c"
                  " -I" LOOM_PREFIX "/include"
                  " -L" LOOM_PREFIX "/lib"
-                 " -lloom -o .loom/runner",
-                 cc);
+                 " -lloom -o %s",
+                 cc, RUNNER_OUT);
         int rc = system(compile);
         if (rc != 0) {
             LOOM_ERR("failed to compile build.c");
@@ -106,12 +152,16 @@ static int cmd_dispatch(const char *cmd, int argc, char **argv) {
 
     int n = argc + 3;
     char **rav = calloc(n, sizeof(char *));
-    rav[0] = ".loom/runner";
+    rav[0] = RUNNER_OUT;
     rav[1] = (char *)cmd;
     for (int i = 0; i < argc; i++) rav[i + 2] = argv[i];
     rav[n - 1] = NULL;
 
-    execv(".loom/runner", rav);
+#ifdef _WIN32
+    _execv(RUNNER_OUT, rav);
+#else
+    execv(RUNNER_OUT, rav);
+#endif
     LOOM_ERR("failed to execute runner");
     free(rav);
     return 1;
