@@ -1,0 +1,7 @@
+.loom/
+build/
+*.o
+*.a
+*.so
+*.dylib
+*.d
