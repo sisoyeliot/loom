@@ -5,8 +5,6 @@ echo Bootstrapping loom on Windows...
 
 if not exist build\cli mkdir build\cli
 if not exist build\lib mkdir build\lib
-
-:: Find a compiler
 set CC=
 where clang >nul 2>&1
 if %ERRORLEVEL% equ 0 set CC=clang
@@ -31,7 +29,6 @@ echo Using compiler: %CC%
 set CFLAGS=-std=c11 -Wall -Wextra -O2 -Iinclude
 
 if "%CC%"=="cl" (
-    :: MSVC syntax
     set CFLAGS=/std:c11 /W3 /O2 /Iinclude /D_CRT_SECURE_NO_WARNINGS
     
     echo   CC   src\main.c src\init.c src\path.c src\exec.c
@@ -55,7 +52,6 @@ if "%CC%"=="cl" (
     echo   AR   build\libloom.lib
     lib /OUT:build\libloom.lib build\lib\loom.o build\lib\runner.o build\lib\toolchain.o build\lib\hash.o build\lib\cache.o build\lib\exec.o build\lib\path.o
 ) else (
-    :: GCC/Clang syntax
     echo   CC   src\main.c src\init.c src\path.c src\exec.c
     %CC% %CFLAGS% -c src\main.c -o build\cli\main.o
     %CC% %CFLAGS% -c src\init.c -o build\cli\init.o

@@ -6,9 +6,9 @@
 
 int main(void) {
 #ifdef USE_COLORS
-    printf("\033[1;36mHello, %s!\033[0m\n", GREETING);
+  printf("\033[1;36mHello, %s!\033[0m\n", GREETING);
 #else
-    printf("Hello, %s!\n", GREETING);
+  printf("Hello, %s!\n", GREETING);
 #endif
-    return 0;
+  return 0;
 }
