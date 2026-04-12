@@ -1,28 +1,7 @@
 #include "internal.h"
 #include <sys/stat.h>
 
-#ifdef _WIN32
-static char *loom_strtok_r(char *str, const char *delim, char **saveptr) {
-  if (str == NULL)
-    str = *saveptr;
-  if (str == NULL)
-    return NULL;
-  str += strspn(str, delim);
-  if (*str == '\0') {
-    *saveptr = NULL;
-    return NULL;
-  }
-  char *end = str + strcspn(str, delim);
-  if (*end == '\0') {
-    *saveptr = NULL;
-  } else {
-    *end = '\0';
-    *saveptr = end + 1;
-  }
-  return str;
-}
-#define strtok_r loom_strtok_r
-#endif
+
 
 static int read_depfile(const char *path, loom_arr_t *deps) {
   FILE *f = fopen(path, "r");

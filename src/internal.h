@@ -11,6 +11,10 @@
 #ifndef _CRT_NONSTDC_NO_WARNINGS
 #define _CRT_NONSTDC_NO_WARNINGS
 #endif
+char *loom_strndup(const char *s, size_t n);
+#define strndup loom_strndup
+char *loom_strtok_r(char *str, const char *delim, char **saveptr);
+#define strtok_r loom_strtok_r
 #endif
 
 #include <stdint.h>

@@ -2,7 +2,7 @@
 #include <errno.h>
 
 #ifdef _WIN32
-static char *strndup(const char *s, size_t n) {
+char *loom_strndup(const char *s, size_t n) {
   char *result;
   size_t len = 0;
   while (len < n && s[len])
@@ -13,6 +13,26 @@ static char *strndup(const char *s, size_t n) {
   memcpy(result, s, len);
   result[len] = '\0';
   return result;
+}
+
+char *loom_strtok_r(char *str, const char *delim, char **saveptr) {
+  if (str == NULL)
+    str = *saveptr;
+  if (str == NULL)
+    return NULL;
+  str += strspn(str, delim);
+  if (*str == '\0') {
+    *saveptr = NULL;
+    return NULL;
+  }
+  char *end = str + strcspn(str, delim);
+  if (*end == '\0') {
+    *saveptr = NULL;
+  } else {
+    *end = '\0';
+    *saveptr = end + 1;
+  }
+  return str;
 }
 #endif
 

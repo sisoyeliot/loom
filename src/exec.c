@@ -31,7 +31,9 @@ int loom_nproc(void) {
 
 int loom_exec(char **argv) {
   char *cmd = build_cmdline(argv);
-  STARTUPINFOA si = {sizeof(STARTUPINFOA)};
+  STARTUPINFOA si;
+  memset(&si, 0, sizeof(si));
+  si.cb = sizeof(si);
   PROCESS_INFORMATION pi;
 
   if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
@@ -57,7 +59,9 @@ int loom_exec_capture(char **argv, char *buf, size_t bufsz) {
     return -1;
   SetHandleInformation(hChildStdOutRd, HANDLE_FLAG_INHERIT, 0);
 
-  STARTUPINFOA si = {sizeof(STARTUPINFOA)};
+  STARTUPINFOA si;
+  memset(&si, 0, sizeof(si));
+  si.cb = sizeof(si);
   si.hStdOutput = hChildStdOutWr;
   si.hStdError = hChildStdOutWr;
   si.dwFlags |= STARTF_USESTDHANDLES;
@@ -127,7 +131,9 @@ int loom_exec_jobs(loom_job_t *jobs, int n, int total, int maxj, int verbose) {
       }
 
       char *cmd = build_cmdline(jobs[next].argv);
-      STARTUPINFOA si = {sizeof(STARTUPINFOA)};
+      STARTUPINFOA si;
+      memset(&si, 0, sizeof(si));
+      si.cb = sizeof(si);
       PROCESS_INFORMATION pi;
       if (CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si,
                          &pi)) {

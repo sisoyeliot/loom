@@ -164,7 +164,7 @@ static int cmd_dispatch(const char *cmd, int argc, char **argv) {
   rav[n - 1] = NULL;
 
 #ifdef _WIN32
-  _execv(RUNNER_OUT, rav);
+  _execv(RUNNER_OUT, (const char *const *)rav);
 #else
   execv(RUNNER_OUT, rav);
 #endif
