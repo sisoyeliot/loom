@@ -1,5 +1,7 @@
 #include <loom.h>
 
+#define LOOM_NO_SHORT_NAMES
+
 void build(loom_build_t *b) {
   loom_target_t *exe = loom_add_executable(b, "shader_demo");
 
