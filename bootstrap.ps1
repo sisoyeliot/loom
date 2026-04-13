@@ -1,7 +1,7 @@
 param (
     [Parameter(Position=0)]
     [string]$Command = "build",
-    [string]$Prefix = "$env:ProgramFiles\loom"
+    [string]$Prefix = "$env:LOCALAPPDATA\loom"
 )
 
 $targetPath = $Prefix
@@ -17,10 +17,10 @@ if ($Command -eq "build") {
     if (-not (Test-Path "build\lib")) { New-Item -ItemType Directory -Force -Path "build\lib" | Out-Null }
 
     $CC = $null
-    if (Get-Command clang -ErrorAction SilentlyContinue) {
-        $CC = "clang"
-    } elseif (Get-Command gcc -ErrorAction SilentlyContinue) {
+    if (Get-Command gcc -ErrorAction SilentlyContinue) {
         $CC = "gcc"
+    } elseif (Get-Command clang -ErrorAction SilentlyContinue) {
+        $CC = "clang"
     } elseif (Get-Command cl -ErrorAction SilentlyContinue) {
         $CC = "cl"
     }
@@ -113,6 +113,16 @@ if ($Command -eq "build") {
             Copy-Item -Path "build\libloom.lib" -Destination (Join-Path $LibDir "libloom.lib") -Force -ErrorAction Stop
         }
 
+        # Add to PATH
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        $pathTarget = if ($isAdmin) { "Machine" } else { "User" }
+        $oldPath = [Environment]::GetEnvironmentVariable("Path", $pathTarget)
+        if (-not ($oldPath -split ";" -contains $BinDir)) {
+            $newPath = if ($oldPath.EndsWith(";")) { $oldPath + $BinDir } else { $oldPath + ";" + $BinDir }
+            [Environment]::SetEnvironmentVariable("Path", $newPath, $pathTarget)
+            Write-Host "  Added $BinDir to $pathTarget PATH."
+        }
+
         Write-Host "Installation completed successfully."
     } catch [System.UnauthorizedAccessException] {
         Write-Host "`nError: Permiso denegado. Abre PowerShell como Administrador para instalar en $targetPath"
@@ -134,6 +144,16 @@ if ($Command -eq "build") {
         if (Test-Path $loomHeader) { Write-Host "  RM $loomHeader"; Remove-Item -Force $loomHeader -ErrorAction Stop }
         if (Test-Path $loomA) { Write-Host "  RM $loomA"; Remove-Item -Force $loomA -ErrorAction Stop }
         if (Test-Path $loomLib) { Write-Host "  RM $loomLib"; Remove-Item -Force $loomLib -ErrorAction Stop }
+
+        # Remove from PATH
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        $pathTarget = if ($isAdmin) { "Machine" } else { "User" }
+        $oldPath = [Environment]::GetEnvironmentVariable("Path", $pathTarget)
+        if ($oldPath -match [regex]::Escape($BinDir)) {
+            $newPath = ($oldPath -split ";" | Where-Object { $_ -ne $BinDir }) -join ";"
+            [Environment]::SetEnvironmentVariable("Path", $newPath, $pathTarget)
+            Write-Host "  Removed $BinDir from $pathTarget PATH."
+        }
 
         Write-Host "Uninstallation completed successfully."
     } catch [System.UnauthorizedAccessException] {

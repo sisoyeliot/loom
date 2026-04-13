@@ -83,11 +83,11 @@ void loom_link_system_library(loom_target_t *t, const char *name) {
   char *av1[] = {"sh", "-c", cmd, NULL};
   if (loom_exec_capture(av1, buf, sizeof(buf)) == 0 && buf[0]) {
     char *sv = NULL;
-    char *tok = strtok_r(buf, " \t\n", &sv);
+    char *tok = strtok_r(buf, " \t\n\r", &sv);
     while (tok) {
       if (tok[0])
         loom_add_cflag(t, tok);
-      tok = strtok_r(NULL, " \t\n", &sv);
+      tok = strtok_r(NULL, " \t\n\r", &sv);
     }
   }
 
@@ -95,11 +95,11 @@ void loom_link_system_library(loom_target_t *t, const char *name) {
   char *av2[] = {"sh", "-c", cmd, NULL};
   if (loom_exec_capture(av2, buf, sizeof(buf)) == 0 && buf[0]) {
     char *sv = NULL;
-    char *tok = strtok_r(buf, " \t\n", &sv);
+    char *tok = strtok_r(buf, " \t\n\r", &sv);
     while (tok) {
       if (tok[0])
         loom_add_ldflag(t, tok);
-      tok = strtok_r(NULL, " \t\n", &sv);
+      tok = strtok_r(NULL, " \t\n\r", &sv);
     }
     return;
   }
@@ -361,7 +361,11 @@ static const char *output_name(loom_target_t *t) {
   const char *base = t->outname ? t->outname : t->name;
   switch (t->type) {
   case LOOM_EXECUTABLE:
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+    snprintf(buf, sizeof(buf), "%s.exe", base);
+#else
     snprintf(buf, sizeof(buf), "%s", base);
+#endif
     break;
   case LOOM_STATIC_LIB:
     snprintf(buf, sizeof(buf), "lib%s.a", base);

@@ -143,7 +143,7 @@ int loom_exec_jobs(loom_job_t *jobs, int n, int total, int maxj, int verbose) {
         next++;
         running++;
       } else {
-        LOOM_ERR("failed to spawn: %s", jobs[next].label);
+        LOOM_ERR("failed to spawn (err %lu): %s", GetLastError(), jobs[next].label);
         failed = 1;
       }
       free(cmd);

@@ -2,8 +2,11 @@
 
 static void trim_newline(char *s) {
   char *nl = strchr(s, '\n');
-  if (nl)
+  if (nl) {
     *nl = '\0';
+    if (nl > s && *(nl - 1) == '\r')
+      *(nl - 1) = '\0';
+  }
 }
 
 static int resolve_path(const char *name, char *out, size_t outsz) {

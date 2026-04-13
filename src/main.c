@@ -10,15 +10,18 @@
 #endif
 
 #ifndef LOOM_PREFIX
-#define LOOM_PREFIX "/usr/local"
+#define LOOM_PREFIX /usr/local
 #endif
+
+#define STR(s) #s
+#define XSTR(s) STR(s)
 
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
 static void version(void) { printf("loom %s\n", LOOM_VERSION); }
 
 static void usage(void) {
-  printf("loom %s — build system for C\n\n", LOOM_VERSION);
+  printf("loom %s - build system for C\n\n", LOOM_VERSION);
   printf("usage: loom <command> [options]\n\n");
   printf("commands:\n");
   printf("  build          Compile the project\n");
@@ -144,8 +147,8 @@ static int cmd_dispatch(const char *cmd, int argc, char **argv) {
     char compile[4096];
     snprintf(compile, sizeof(compile),
              "%s -std=c11 -O2 build.c"
-             " -I" LOOM_PREFIX "/include"
-             " -L" LOOM_PREFIX "/lib"
+             " -I" XSTR(LOOM_PREFIX) "/include"
+             " -L" XSTR(LOOM_PREFIX) "/lib"
              " -lloom -o %s",
              cc, RUNNER_OUT);
     int rc = system(compile);
@@ -164,13 +167,15 @@ static int cmd_dispatch(const char *cmd, int argc, char **argv) {
   rav[n - 1] = NULL;
 
 #ifdef _WIN32
-  _execv(RUNNER_OUT, (const char *const *)rav);
+  int rc = loom_exec((char **)rav);
+  free(rav);
+  return rc;
 #else
   execv(RUNNER_OUT, rav);
-#endif
   LOOM_ERR("failed to execute runner");
   free(rav);
   return 1;
+#endif
 }
 
 int main(int argc, char **argv) {
