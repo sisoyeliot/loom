@@ -3,7 +3,7 @@ AR      ?= ar
 PREFIX  ?= /usr/local
 CFLAGS   = -std=c11 -Wall -Wextra -O2 -Iinclude
 
-CLI_SRC  = src/main.c src/init.c src/path.c
+CLI_SRC  = src/main.c src/init.c src/path.c src/exec.c
 LIB_SRC  = src/loom.c src/runner.c src/toolchain.c src/hash.c \
            src/cache.c src/exec.c src/path.c
 
